@@ -16,11 +16,12 @@ import click
 # Parse a session manager file and extract the session dict and its name
 # Returns a tuple (name, data)
 def parse_file(file_path):
+
     logging.info(f'Parsing file {file_path}')
-    session_name_regex = re.compile(r'[^=]*=(.*)')
-    true_regex = re.compile('true')
-    false_regex = re.compile('false')
-    none_regex = re.compile('null')
+    session_name_regex = re.compile(r'[^=]*=(.*)') # Capture session name
+    true_regex = re.compile('true') # .session file writes 'True' as 'true'
+    false_regex = re.compile('false') # .session file writes 'False' as 'false'
+    none_regex = re.compile('null') # .session file writes 'None' as 'null'
     name = None
     data = None
     with open(file_path) as fh:
@@ -38,13 +39,14 @@ def parse_file(file_path):
                 line = false_regex.sub('False', line)
                 line = none_regex.sub('None', line)
 
+                # Read the session data
                 try:
-                    data = ast.literal_eval(line)
+                    data = ast.literal_eval(line) # Session information is written almost as a literal dict() description
                 except ValueError as ex:
-                    logging.info(f'Failed parsing line:\n{line}\n') # Too much output
+                    # Write in the log file in which part of the .session file the error was
+                    logging.info(f'Failed parsing line:\n{line}\n')
                     _exc_type, exc_value, exc_traceback = sys.exc_info()
                     logging.error("ERROR: %r" % (exc_value))
-                    # traceback.print_tb(exc_traceback)
                     last_tb = exc_traceback
                     while last_tb.tb_next:
                         last_tb = last_tb.tb_next
@@ -52,10 +54,6 @@ def parse_file(file_path):
                         last_tb.tb_frame.f_locals["node"].lineno,
                         last_tb.tb_frame.f_locals["node"].col_offset))
         return (name, data)
-
-        # Something went wrong
-        logging.error('Could not successfully find 5th line containing data')
-        raise ValueError('Could not find data line')
 
 
 # Accept a session dict iterator and write a Firefox bookmarks HTML file
@@ -71,13 +69,16 @@ def html_write(session_dict_iter):
                  """<DL><p>\n"""
                 )
 
+        # Iterate over all sessions
         for folder_tuple in session_dict_iter:
-            folder_name = folder_tuple[0]
+
+            folder_name = folder_tuple[0] # Assuming only one window per session
             logging.info(f'Writing folder {folder_name}')
             folder_data = folder_tuple[1]
             window_1 = folder_data["windows"][0]
             tab_list = window_1["tabs"]
             folder_date = tab_list[0]["lastAccessed"]
+
             # Start folder
             folder_header_str = (f"""    <DT><H3 ADD_DATE="{folder_date}" LAST_MODIFIED="{folder_date}">{folder_name}</H3>""" + 
                                  f"""    <DL><p>\n"""
@@ -87,14 +88,14 @@ def html_write(session_dict_iter):
             # Write folder contents
             for tab_idx, tab in enumerate(tab_list):
                 logging.info(f'Reading info for tab {tab_idx}')
-                # If tab was never loaded
+                # If tab was never loaded tab list will be empty
                 if len(tab["entries"])==0:
                     url = tab["userTypedValue"]
                     tutle = url
                 else:
                     webpage = tab["entries"][0]
                     url = webpage["url"]
-                    if "title" in webpage.keys():
+                    if "title" in webpage.keys(): # Sometimes a webpage has no 'title' key
                         title = webpage["title"]
                     else:
                         title = url
@@ -117,6 +118,7 @@ def html_write(session_dict_iter):
 )
 # Main function
 def main(full_path):
+    # Configure logging
     logging.basicConfig(
         filename='session_manager_exporter.log',
         filemode='w',
@@ -127,11 +129,13 @@ def main(full_path):
     logging.info(f'Searching for session data in {root_dir}')
 
     bm_dict_iter = []
+    # Find all files in the requested directory
     filelist = None
     for folder_name, subfolders, filenames in os.walk(full_path):
         filelist = filenames
         break
 
+    # Parse the .session files
     for filename in filelist:
         logging.info(f'Checking {filename}')
         if filename.endswith('.session') and not filename.startswith('backup'):
@@ -142,7 +146,9 @@ def main(full_path):
             logging.info(f'It NOT is a Session Manager file')
             
 
+    # Write the session information onto a Firefox bookmakrs HTML file
     html_write(bm_dict_iter)
+
 
 if __name__=='__main__':
     main()
